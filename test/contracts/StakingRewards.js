@@ -35,6 +35,7 @@ contract('StakingRewards', accounts => {
 
 	const DAY = 86400;
 	const ZERO_BN = toBN(0);
+	const CLIFF_TIME = toBN(DAY * 5);
 
 	const setRewardsTokenExchangeRate = async ({ rateStaleDays } = { rateStaleDays: 7 }) => {
 		const rewardsTokenIdentifier = await rewardsToken.symbol();
@@ -75,7 +76,13 @@ contract('StakingRewards', accounts => {
 		stakingRewards = await setupContract({
 			accounts,
 			contract: 'StakingRewards',
-			args: [owner, rewardsDistribution.address, rewardsToken.address, stakingToken.address],
+			args: [
+				owner,
+				rewardsDistribution.address,
+				rewardsToken.address,
+				stakingToken.address,
+				CLIFF_TIME,
+			],
 		});
 
 		await Promise.all([
@@ -389,6 +396,34 @@ contract('StakingRewards', accounts => {
 	});
 
 	describe('getReward()', () => {
+		it("should revert if the cliff hasn't been reached", async () => {
+			const totalToStake = toUnit('100');
+			const totalToDistribute = toUnit('5000');
+
+			await stakingToken.transfer(stakingAccount1, totalToStake, { from: owner });
+			await stakingToken.approve(stakingRewards.address, totalToStake, { from: stakingAccount1 });
+			await stakingRewards.stake(totalToStake, { from: stakingAccount1 });
+
+			await rewardsToken.transfer(stakingRewards.address, totalToDistribute, { from: owner });
+			await stakingRewards.notifyRewardAmount(totalToDistribute, {
+				from: mockRewardsDistributionAddress,
+			});
+
+			await fastForward(CLIFF_TIME - DAY * 2);
+
+			const initialRewardBal = await rewardsToken.balanceOf(stakingAccount1);
+			const initialEarnedBal = await stakingRewards.earned(stakingAccount1);
+			await assert.revert(
+				stakingRewards.getReward({ from: stakingAccount1 }),
+				'Cannot get rewards before cliff time'
+			);
+			const postRewardBal = await rewardsToken.balanceOf(stakingAccount1);
+			const postEarnedBal = await stakingRewards.earned(stakingAccount1);
+
+			assert.bnGte(postEarnedBal, initialEarnedBal);
+			assert.bnEqual(postRewardBal, initialRewardBal);
+		});
+
 		it('should increase rewards token balance', async () => {
 			const totalToStake = toUnit('100');
 			const totalToDistribute = toUnit('5000');
@@ -402,7 +437,7 @@ contract('StakingRewards', accounts => {
 				from: mockRewardsDistributionAddress,
 			});
 
-			await fastForward(DAY);
+			await fastForward(CLIFF_TIME);
 
 			const initialRewardBal = await rewardsToken.balanceOf(stakingAccount1);
 			const initialEarnedBal = await stakingRewards.earned(stakingAccount1);
@@ -487,7 +522,7 @@ contract('StakingRewards', accounts => {
 				from: mockRewardsDistributionAddress,
 			});
 
-			await fastForward(DAY * 4);
+			await fastForward(CLIFF_TIME);
 			await stakingRewards.getReward({ from: stakingAccount1 });
 			await fastForward(DAY * 4);
 
@@ -570,7 +605,7 @@ contract('StakingRewards', accounts => {
 				from: mockRewardsDistributionAddress,
 			});
 
-			await fastForward(DAY);
+			await fastForward(CLIFF_TIME);
 
 			const initialRewardBal = await rewardsToken.balanceOf(stakingAccount1);
 			const initialEarnedBal = await stakingRewards.earned(stakingAccount1);
@@ -591,7 +626,13 @@ contract('StakingRewards', accounts => {
 			localStakingRewards = await setupContract({
 				accounts,
 				contract: 'StakingRewards',
-				args: [owner, rewardsDistribution.address, rewardsToken.address, stakingToken.address],
+				args: [
+					owner,
+					rewardsDistribution.address,
+					rewardsToken.address,
+					stakingToken.address,
+					CLIFF_TIME,
+				],
 			});
 
 			await localStakingRewards.setRewardsDistribution(mockRewardsDistributionAddress, {
@@ -663,14 +704,14 @@ contract('StakingRewards', accounts => {
 				from: authority,
 			});
 
-			// Period finish should be ~7 days from now
+			// Period finish should be ~60 days from now
 			const periodFinish = await stakingRewards.periodFinish();
 			const curTimestamp = await currentTime();
 			assert.equal(parseInt(periodFinish.toString(), 10), curTimestamp + DAY * 7);
 
 			// Reward duration is 7 days, so we'll
 			// Fastforward time by 6 days to prevent expiration
-			await fastForward(DAY * 6);
+			await fastForward(6 * DAY);
 
 			// Reward rate and reward per token
 			const rewardRate = await stakingRewards.rewardRate();

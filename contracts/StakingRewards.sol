@@ -24,9 +24,11 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
     uint256 public rewardsDuration = 7 days;
     uint256 public lastUpdateTime;
     uint256 public rewardPerTokenStored;
+    uint256 public cliffTime;
 
     mapping(address => uint256) public userRewardPerTokenPaid;
     mapping(address => uint256) public rewards;
+    mapping(address => uint256) public lastStakeTime;
 
     uint256 private _totalSupply;
     mapping(address => uint256) private _balances;
@@ -37,11 +39,13 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
         address _owner,
         address _rewardsDistribution,
         address _rewardsToken,
-        address _stakingToken
+        address _stakingToken,
+        uint256 _cliffTime
     ) public Owned(_owner) {
         rewardsToken = IERC20(_rewardsToken);
         stakingToken = IERC20(_stakingToken);
         rewardsDistribution = _rewardsDistribution;
+        cliffTime = _cliffTime;
     }
 
     /* ========== VIEWS ========== */
@@ -82,6 +86,7 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
         require(amount > 0, "Cannot stake 0");
         _totalSupply = _totalSupply.add(amount);
         _balances[msg.sender] = _balances[msg.sender].add(amount);
+        lastStakeTime[msg.sender] = block.timestamp;
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
         emit Staked(msg.sender, amount);
     }
@@ -95,6 +100,7 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
     }
 
     function getReward() public nonReentrant updateReward(msg.sender) {
+        require(block.timestamp > lastStakeTime[msg.sender] + cliffTime, "Cannot get rewards before cliff time");
         uint256 reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
