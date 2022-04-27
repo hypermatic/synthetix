@@ -153,6 +153,10 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
         emit RewardsDurationUpdated(rewardsDuration);
     }
 
+    function setCliffTime(uint256 _cliffTime) external onlyOwner {
+        cliffTime = _cliffTime;
+    }
+
     /* ========== MODIFIERS ========== */
 
     modifier updateReward(address account) {

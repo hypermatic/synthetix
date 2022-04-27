@@ -112,6 +112,7 @@ contract('StakingRewards', accounts => {
 				'setRewardsDistribution',
 				'setRewardsDuration',
 				'recoverERC20',
+				'setCliffTime',
 			],
 		});
 	});
@@ -170,6 +171,15 @@ contract('StakingRewards', accounts => {
 			await onlyGivenAddressCanInvoke({
 				fnc: stakingRewards.setPaused,
 				args: [true],
+				address: owner,
+				accounts,
+			});
+		});
+
+		it('only owner address can call setCliffTime', async () => {
+			await onlyGivenAddressCanInvoke({
+				fnc: stakingRewards.setCliffTime,
+				args: [12345],
 				address: owner,
 				accounts,
 			});
